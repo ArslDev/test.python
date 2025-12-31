@@ -1,60 +1,78 @@
+from flask import Flask, request
 import sqlite3
 import os
 
+app = Flask(__name__)
+
 # ==============================
-# 1) Hard-coded Credentials
+# OWASP A2: Hardcoded Secret
 # ==============================
-DB_PASSWORD = "admin123"   # ❌ Hard-coded password
+app.secret_key = "secret123"   # ❌ Hardcoded secret key
 
 # ==============================
 # Database Setup
 # ==============================
-conn = sqlite3.connect("users.db")
+conn = sqlite3.connect("users.db", check_same_thread=False)
 cursor = conn.cursor()
 cursor.execute("CREATE TABLE IF NOT EXISTS users (username TEXT, password TEXT)")
 cursor.execute("INSERT INTO users VALUES ('admin', '1234')")
 conn.commit()
 
-print("=== Vulnerable Python Program ===")
+# ==============================
+# OWASP A3: SQL Injection
+# ==============================
+@app.route("/search")
+def search():
+    user = request.args.get("user")
+
+    # ❌ Vulnerable SQL query
+    query = "SELECT * FROM users WHERE username = '" + user + "'"
+    cursor.execute(query)
+
+    return str(cursor.fetchall())
 
 # ==============================
-# 2) SQL Injection
+# OWASP A7: Cross-Site Scripting (XSS)
 # ==============================
-username = input("Enter username to search: ")
-
-# ❌ Vulnerable SQL Query
-query = "SELECT * FROM users WHERE username = '" + username + "'"
-cursor.execute(query)
-print("User Data:", cursor.fetchall())
-
-# ==============================
-# 3) Weak Authentication
-# ==============================
-login_user = input("Login Username: ")
-login_pass = input("Login Password: ")
-
-# ❌ Weak login logic
-if login_user == "admin" and login_pass == "1234":
-    print("Login Successful!")
-else:
-    print("Login Failed!")
+@app.route("/xss")
+def xss():
+    name = request.args.get("name")
+    # ❌ No output encoding
+    return f"<h1>Hello {name}</h1>"
 
 # ==============================
-# 4) Command Injection
+# OWASP A1: Broken Authentication
 # ==============================
-file_name = input("Enter file name to view: ")
+@app.route("/login", methods=["POST"])
+def login():
+    username = request.form.get("username")
+    password = request.form.get("password")
 
-# ❌ Command Injection vulnerability
-os.system("type " + file_name)  # Windows
-# os.system("cat " + file_name) # Linux / Mac
+    # ❌ Weak authentication
+    if username == "admin" and password == "1234":
+        return "Login Successful"
+    else:
+        return "Login Failed"
 
 # ==============================
-# 5) Path Traversal / Insecure File Write
+# OWASP A5: Command Injection
 # ==============================
-new_file = input("Enter file name to create: ")
+@app.route("/cmd")
+def cmd():
+    command = request.args.get("cmd")
+    # ❌ Command injection
+    return os.popen(command).read()
 
-# ❌ No file validation
-with open(new_file, "w") as f:
-    f.write("This is a vulnerable file write example.")
+# ==============================
+# OWASP A6: Security Misconfiguration
+# ==============================
+@app.route("/debug")
+def debug():
+    # ❌ Sensitive information disclosure
+    return str(app.config)
 
-print("File created successfully!")
+# ==============================
+# Run App
+# ==============================
+if __name__ == "__main__":
+    app.run(debug=True)
